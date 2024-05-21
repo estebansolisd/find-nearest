@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { debounce } from "lodash";
 import data from "./data/cities.json";
 import { GeolocationRecord } from "./types";
@@ -33,28 +33,27 @@ function App() {
     debounce((term) => {
       setState((prev) => ({
         ...prev,
-        results: term
-          ? geolocationRecords
-              .filter((city) =>
-                city.name
-                  .toLowerCase()
-                  .trim()
-                  .includes(term.toLowerCase().trim())
-              )
-              .sort((a, b) => {
-                if (a.lat < b.lat) return -1;
-                if (a.lat > b.lat) return 1;
+        results: geolocationRecords
+          .filter((city) =>
+            city.name.toLowerCase().trim().includes(term.toLowerCase().trim())
+          )
+          .sort((a, b) => {
+            if (a.lat < b.lat) return -1;
+            if (a.lat > b.lat) return 1;
 
-                return a.lng - b.lng;
-              })
-          : geolocationRecords,
+            return a.lng - b.lng;
+          }),
       }));
     }, 500),
     []
   );
 
   useEffect(() => {
-    debouncedSearch(state.search);
+    if (state.search) {
+      debouncedSearch(state.search);
+    } else {
+      setState((prev) => ({ ...prev, results: geolocationRecords }));
+    }
   }, [state.search, debouncedSearch]);
 
   const handleClick = (record: GeolocationRecord) => () => {
@@ -84,6 +83,10 @@ function App() {
     }));
   };
 
+  const handleChange = (e: ChangeEvent<HTMLInputElement> ) => {
+    setState((prev) => ({ ...prev, search: e.target.value, currentId: undefined }));
+  };
+
   return (
     <div className="min-h-screen h-full w-full">
       <div className="h-full w-full flex gap-4 p-10 flex-col">
@@ -95,9 +98,7 @@ function App() {
               id="searchbox"
               className="w-48 p-2 border border-gray-300 rounded-md focus:ring focus:ring-blue-500 focus:outline-none hover:bg-gray-100 text-gray-700 placeholder-gray-400"
               value={state.search}
-              onChange={(e) =>
-                setState((prev) => ({ ...prev, search: e.target.value }))
-              }
+              onChange={handleChange}
             />
           </div>
         </div>
@@ -107,7 +108,9 @@ function App() {
               <li
                 onClick={handleClick(result)}
                 key={`${result.name}-${result.lat}-${result.lng}`}
-                className={`w-full cursor-pointer ${result.id === state.currentId ? "bg-slate-400 font-bold" : ""  }`}
+                className={`w-full cursor-pointer ${
+                  result.id === state.currentId ? "bg-slate-400 font-bold" : ""
+                }`}
               >
                 {result.name}
               </li>

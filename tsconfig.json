@@ -31,7 +31,8 @@
       "pages/*": ["src/pages/*"],
       "processes/*": ["src/processes/*"],
       "app/*": ["src/app/*"]
-    }
+    },
+    "types": ["node", "jest", "@testing-library/jest-dom"],
   },
   "include": ["src", "types/vite-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
