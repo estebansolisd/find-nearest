@@ -168,7 +168,7 @@ function App() {
         </ul>
 
         {state.currentId && (
-          <div>
+          <div data-testid="cercanos">
             <h6 className="font-bold">Cercanos: </h6>
             <ul className="h-96 w-56 overflow-y-auto">
               {state.topFour.map((result) => {

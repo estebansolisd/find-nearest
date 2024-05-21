@@ -1,48 +1,79 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import App from "../App";
-import data from "../data/cities.json"
-import { vi } from "vitest";
-vi.mock("lodash/debounce", () => vi.fn()); // Mock debounce for testing
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import App from '../App';
+import { GeolocationRecord } from '../types';
 
-describe("App component", () => {
-  it("should render initial state", () => {
+const mockData: GeolocationRecord[] = [
+  { id: '1', country: "US", name: 'City One', lat: 0, lng: 0 },
+  { id: '2', country: "US", name: 'City Two', lat: 1, lng: 1 },
+  { id: '3', country: "US", name: 'City Three', lat: 2, lng: 2 },
+  { id: '4', country: "US", name: 'City Four', lat: 3, lng: 3 },
+  { id: '5', country: "US", name: 'City Five', lat: 4, lng: 4 },
+];
+
+global.fetch = vi.fn(() =>
+  Promise.resolve({
+    json: () => Promise.resolve(mockData),
+  })
+);
+
+describe('App Component', () => {
+  beforeEach(() => {
     render(<App />);
-    expect(screen.getByLabelText("Find a city:")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("");
   });
 
-  it("should filter results based on search term", () => {
-    render(<App />);
-    const searchInput = screen.getByRole("textbox");
-    fireEvent.change(searchInput, { target: { value: "Bay Minette" } });
-    expect(screen.getByText("Bay Minette")).toBeInTheDocument();
-    expect(screen.queryByText("Edna")).not.toBeInTheDocument(); // Not displayed
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("should sort results by latitude and longitude", () => {
-    render(<App />); // Provide mock data with lat/lng values
-    const results = screen.getAllByRole("listitem");
-
-    expect(results[0].textContent).toBe("Bay Minette"); // City B has lower latitude
-    expect(results[1].textContent).toBe("Edna"); // City A has next lowest lat
+  it('renders the input box', () => {
+    expect(screen.getByPlaceholderText('Write here...')).toBeInTheDocument();
   });
 
-  it("should update currentId and topFour on clicking a result", () => {
-    render(<App />);
-
-    const cityBListItem = screen.getByText("Bay Minette");
-    fireEvent.click(cityBListItem);
-    waitFor(() => {
-        expect(screen.getByText("Cercanos: ")).not.toBe(null);
-        expect(screen.getByText("Creola")).toBeInTheDocument(); // Should be closest
-    })
+  it('fetches and displays geolocation records', async () => {
+    await waitFor(() => {
+      mockData.forEach((record) => {
+        expect(screen.getByText(record.name)).toBeInTheDocument();
+      });
+    });
   });
 
-  it("should handle empty search term", () => {
-    render(<App />);
-    const searchInput = screen.getByRole("textbox");
-    fireEvent.change(searchInput, { target: { value: "" } });
+  it('filters results based on search input', async () => {
+    fireEvent.change(screen.getByPlaceholderText('Write here...'), {
+      target: { value: 'City Two' },
+    });
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(data.length); // All results displayed
+    await waitFor(() => {
+      expect(screen.getByText('City Three')).toBeInTheDocument();
+      expect(screen.getByText('City Four')).toBeInTheDocument();
+      expect(screen.getByText('City Five')).toBeInTheDocument();
+      expect(screen.queryByText('City Two')).not.toBeInTheDocument();
+    });
+  });
+
+  it('displays loading indicator during fetch', async () => {
+    await waitFor(() => {
+      expect(screen.getByText('Loading...')).toHaveClass('visible');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Loading...')).toHaveClass('invisible');
+    });
+  });
+
+  it('handles click on a geolocation record and shows top four nearby cities', async () => {
+    await waitFor(() => {
+      fireEvent.click(screen.getByText('City One'));
+    });
+
+    const cercanos = screen.getByTestId('cercanos');
+    const citiesWithinCercanos = within(cercanos);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cercanos:')).toBeInTheDocument();
+      mockData.slice(1).forEach((record) => {
+        expect(citiesWithinCercanos.getByText(record.name)).toBeInTheDocument();
+      });
+    });
   });
 });
