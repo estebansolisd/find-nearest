@@ -1,6 +1,5 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import { debounce } from "lodash";
-import data from "./data/cities.json";
 import { GeolocationRecord } from "./types";
 import { calculateDistance } from "./utils";
 import { v4 } from "uuid";
@@ -9,6 +8,8 @@ type State = {
   search: string;
   results: GeolocationRecord[];
   topFour: GeolocationRecord[];
+  geolocationRecords: GeolocationRecord[];
+  isLoading: boolean;
   currentId?: string;
 };
 
@@ -17,47 +18,91 @@ function App() {
     search: "",
     results: [],
     topFour: [],
+    geolocationRecords: [],
+    isLoading: false,
   });
-  const geolocationRecords = useMemo<GeolocationRecord[]>(
-    () =>
-      data.map((item) => ({
-        ...item,
-        id: v4(),
-        lat: Number(item.lat),
-        lng: Number(item.lng),
-      })),
-    []
-  );
+
+  const fetchGeolocationRecords = async () => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+    try {
+      const res = await fetch("/cities.json");
+      const jsonData: Record<string,string>[] = await res.json();
+      const newGeolocationRecords  = jsonData.map(
+        (prev) => ({
+          ...prev,
+          lat: Number(prev.lat),
+          lng: Number(prev.lng),
+          id: v4(),
+        })
+      ) as GeolocationRecord[];
+      setState((prev) => ({
+        ...prev,
+        geolocationRecords: newGeolocationRecords,
+        results: newGeolocationRecords,
+      }));
+    } catch (err) {
+      console.error(err, "error fetching geolocation records");
+    }
+    setState((prev) => ({ ...prev, isLoading: false }));
+  };
 
   const debouncedSearch = useCallback(
     debounce((term) => {
+      if (!term) {
+        return setState(prev => ({...prev, results: prev.geolocationRecords}));
+      }
+
+      console.log(state.geolocationRecords, "state.geolocationRecords");
+      
+      const nearCity = state.geolocationRecords.find((geoRecord) => {
+        return geoRecord.name
+          .toLowerCase()
+          .trim()
+          .includes(term.toLowerCase().trim());
+      });
+
+      console.log(nearCity, "nearCity");
+      
+
+      if (!nearCity) {
+        return;
+      }
+
+      const nearCities = state.geolocationRecords
+        .filter((geoRecord) => geoRecord.id !== nearCity.id)
+        .sort((a, b) => {
+          const distanceA = calculateDistance(
+            nearCity.lat,
+            nearCity.lng,
+            a.lat,
+            a.lng
+          );
+          const distanceB = calculateDistance(
+            nearCity.lat,
+            nearCity.lng,
+            b.lat,
+            b.lng
+          );
+          const diff = distanceA - distanceB;
+          console.log(diff, "diff");
+          
+          return diff;
+        });
+
       setState((prev) => ({
         ...prev,
-        results: geolocationRecords
-          .filter((city) =>
-            city.name.toLowerCase().trim().includes(term.toLowerCase().trim())
-          )
-          .sort((a, b) => {
-            if (a.lat < b.lat) return -1;
-            if (a.lat > b.lat) return 1;
-
-            return a.lng - b.lng;
-          }),
+        results: nearCities,
       }));
     }, 500),
-    []
+    [state.geolocationRecords]
   );
 
   useEffect(() => {
-    if (state.search) {
-      debouncedSearch(state.search);
-    } else {
-      setState((prev) => ({ ...prev, results: geolocationRecords }));
-    }
-  }, [state.search, debouncedSearch]);
+    fetchGeolocationRecords();
+  }, []);
 
   const handleClick = (record: GeolocationRecord) => () => {
-    const newTopFour = geolocationRecords
+    const newTopFour = state.geolocationRecords
       .filter((item) => item.id !== record.id)
       .sort((a, b) => {
         const distanceA = calculateDistance(
@@ -83,8 +128,14 @@ function App() {
     }));
   };
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement> ) => {
-    setState((prev) => ({ ...prev, search: e.target.value, currentId: undefined }));
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    
+    setState((prev) => ({
+      ...prev,
+      search: e.target.value,
+      currentId: undefined,
+    }));
+    debouncedSearch(e.target.value)
   };
 
   return (
@@ -107,7 +158,7 @@ function App() {
             return (
               <li
                 onClick={handleClick(result)}
-                key={`${result.name}-${result.lat}-${result.lng}`}
+                key={`autocomplete-${result.id}`}
                 className={`w-full cursor-pointer ${
                   result.id === state.currentId ? "bg-slate-400 font-bold" : ""
                 }`}
@@ -124,7 +175,7 @@ function App() {
             <ul className="h-96 w-56 overflow-y-auto">
               {state.topFour.map((result) => {
                 return (
-                  <li key={`${result.id}`} className="w-full">
+                  <li key={`top-four-${result.id}`} className="w-full">
                     {result.name}
                   </li>
                 );
